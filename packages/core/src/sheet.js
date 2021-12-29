@@ -1,3 +1,5 @@
+import "./utility/adoptedStyleSheets.js"
+
 /** @typedef {import('./sheet').RuleGroup} RuleGroup */
 /** @typedef {import('./sheet').RuleGroupNames} RuleGroupNames */
 /** @typedef {import('./sheet').SheetGroup} SheetGroup */
@@ -112,7 +114,7 @@ export const createSheet = (/** @type {DocumentOrShadowRoot} */ root) => {
 			}
 
 			groupSheet = {
-				sheet: root ? (root.head || root).appendChild(document.createElement('style')).sheet : createCSSMediaRule('', 'text/css'),
+				sheet: root ? new CSSStyleSheet() : createCSSMediaRule('', 'text/css'),
 				rules: {},
 				reset,
 				toString() {
@@ -142,6 +144,7 @@ export const createSheet = (/** @type {DocumentOrShadowRoot} */ root) => {
 						.join('')
 				},
 			}
+			if (root) { root.adoptedStyleSheets = [...root.adoptedStyleSheets, groupSheet.sheet] }
 		}
 
 		const { sheet, rules } = groupSheet
@@ -152,14 +155,14 @@ export const createSheet = (/** @type {DocumentOrShadowRoot} */ root) => {
 				// name of prev group
 				const prevName = names[i + 1]
 				// get the index of that prev group or else get the length of the whole sheet
-				const index = rules[prevName] ? rules[prevName].index : sheet.cssRules.length
+				const index = rules[prevName]?.index ?? sheet.cssRules.length
 				// insert the grouping & the sxs rule
 				sheet.insertRule('@media{}', index)
 				sheet.insertRule(`--sxs{--sxs:${i}}`, index)
 				// add the group to the group sheet
 				rules[name] = { group: sheet.cssRules[index + 1], index, cache: new Set([i]) }
 			}
-			addApplyToGroup(rules[name])
+			addApplyToGroup(rules[name], sheet, root)
 		}
 	}
 
@@ -168,27 +171,32 @@ export const createSheet = (/** @type {DocumentOrShadowRoot} */ root) => {
 	return groupSheet
 }
 
-const addApplyToGroup = (/** @type {RuleGroup} */ group) => {
+const addApplyToGroup = (/** @type {RuleGroup} */ group, sheet) => {
 	const groupingRule = group.group
 
 	let index = groupingRule.cssRules.length
 
+
 	group.apply = (cssText) => {
 		try {
 			groupingRule.insertRule(cssText, index)
-
 			++index
-		} catch {
-			// do nothing and continue
+
+			// Propagate the change to polyfilled stylesheets
+			const groupIndex = Array.from(sheet.cssRules).indexOf(groupingRule)
+			const rules = groupingRule.cssText
+			sheet.insertGroupRule(rules, groupIndex)
+		} catch (e) {
+			// ignore
 		}
 	}
 }
 /** Pending rules for injection */
 const $pr = Symbol()
 
-/** 
+/**
  * When a stitches component is extending some other random react component,
- * it’s gonna create a react component (Injector) using this function and then render it after the children, 
+ * it’s gonna create a react component (Injector) using this function and then render it after the children,
  * this way, we would force the styles of the wrapper to be injected after the wrapped component
  */
 export const createRulesInjectionDeferrer = (globalSheet) => {

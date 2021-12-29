@@ -30,7 +30,7 @@
     "dist/*.mjs",
     "types/*.d.ts"
   ],
-  "sideEffects": false,
+  "sideEffects": true,
   "license": "MIT",
   "repository": "modulz/stitches",
   "homepage": "https://stitches.dev/",
